@@ -28,7 +28,7 @@ st.set_page_config(page_title="Personal Portfolio Dashboard", layout="wide")
 BASE_DIR = Path(__file__).parent
 
 PORT_FILE = BASE_DIR / "data" / "Self_Port.xlsx"
-SP500_FILE = BASE_DIR / "data" / "S&P500.xlsx"
+SP500_FILE = BASE_DIR / "data" / "S&P500_filtered.xlsx"
 FACTSET_FILE = BASE_DIR / "data" / "D_Factset_Tech.xlsx"
 
 # RL Portfolio Result Files
@@ -147,7 +147,7 @@ def load_portfolio() -> pd.DataFrame:
 
 @st.cache_data(show_spinner=True)
 def load_sp500_data() -> Dict[str, pd.DataFrame]:
-    """Load all sheets from S&P500.xlsx"""
+    """Load all sheets from S&P500_filtered.xlsx"""
     if not SP500_FILE.exists():
         st.error(f"S&P500 file not found: {SP500_FILE}")
         return {}
@@ -295,7 +295,7 @@ def get_latest_business_date(sp500_data: Dict[str, pd.DataFrame]) -> pd.Timestam
 
 
 def get_portfolio_with_prices(portfolio: pd.DataFrame, sp500_data: Dict[str, pd.DataFrame]) -> pd.DataFrame:
-    """Merge portfolio with latest prices from S&P500.xlsx"""
+    """Merge portfolio with latest prices from S&P500_filtered.xlsx"""
     if 'PX_LAST' not in sp500_data:
         return portfolio
 
@@ -812,7 +812,7 @@ def page_fundamentals(portfolio: pd.DataFrame, sp500_data: Dict[str, pd.DataFram
     available_metrics = [k for k in METRIC_LABELS.keys() if k in sp500_data]
 
     if not available_metrics:
-        st.warning("No fundamental data available in S&P500.xlsx")
+        st.warning("No fundamental data available in S&P500_filtered.xlsx")
         return
 
     with tab_progression:
