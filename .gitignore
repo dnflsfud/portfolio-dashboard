@@ -1,5 +1,7 @@
-# Large data files
+# Large data files (>100MB - GitHub limit)
 data/S&P500.xlsx
+data/S&P500_filtered.xlsx
+data/D_Factset_re_study.xlsx
 
 # Python
 __pycache__/
