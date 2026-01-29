@@ -37,6 +37,12 @@ RL_DAILY_PERF_FILE = RL_RESULT_DIR / "daily_performance.csv"
 RL_MONTHLY_WEIGHTS_FILE = RL_RESULT_DIR / "monthly_weights.csv"
 RL_FEATURES_DIR = RL_RESULT_DIR / "features"
 
+# RL Ultra Portfolio Result Files
+RL_ULTRA_RESULT_DIR = BASE_DIR / "result_ultra"
+RL_ULTRA_DAILY_PERF_FILE = RL_ULTRA_RESULT_DIR / "daily_performance.csv"
+RL_ULTRA_MONTHLY_WEIGHTS_FILE = RL_ULTRA_RESULT_DIR / "monthly_weights.csv"
+RL_ULTRA_FEATURES_DIR = RL_ULTRA_RESULT_DIR / "features"
+
 COLOR_POSITIVE = "#2ca02c"
 COLOR_NEGATIVE = "#d62728"
 COLOR_BLUE = "#1f77b4"
@@ -1168,14 +1174,50 @@ def page_revision_progression(portfolio: pd.DataFrame, factset_data: Dict[str, p
 def page_rl_portfolio() -> None:
     st.header("RL Portfolio Results")
 
-    # Load data
-    daily_perf = load_rl_daily_performance()
-    monthly_weights = load_rl_monthly_weights()
-    features = load_rl_features()
+    # Model selection
+    model_type = st.radio(
+        "Select Model",
+        ["RL Standard", "RL Ultra"],
+        horizontal=True,
+        help="RL Standard: re_cc.py results | RL Ultra: re_cc_ultra.py results"
+    )
+
+    # Set paths based on selection
+    if model_type == "RL Ultra":
+        result_dir = RL_ULTRA_RESULT_DIR
+        daily_perf_file = RL_ULTRA_DAILY_PERF_FILE
+        monthly_weights_file = RL_ULTRA_MONTHLY_WEIGHTS_FILE
+        features_dir = RL_ULTRA_FEATURES_DIR
+        script_name = "re_cc_ultra.py"
+    else:
+        result_dir = RL_RESULT_DIR
+        daily_perf_file = RL_DAILY_PERF_FILE
+        monthly_weights_file = RL_MONTHLY_WEIGHTS_FILE
+        features_dir = RL_FEATURES_DIR
+        script_name = "re_cc.py"
+
+    # Load data with selected paths
+    daily_perf = pd.DataFrame()
+    if daily_perf_file.exists():
+        daily_perf = pd.read_csv(daily_perf_file, parse_dates=['date'])
+        daily_perf.set_index('date', inplace=True)
+
+    monthly_weights = pd.DataFrame()
+    if monthly_weights_file.exists():
+        monthly_weights = pd.read_csv(monthly_weights_file, parse_dates=['date'])
+        monthly_weights.set_index('date', inplace=True)
+
+    features = {}
+    if features_dir.exists():
+        for csv_file in features_dir.glob("*.csv"):
+            name = csv_file.stem.replace("feature_", "")
+            df = pd.read_csv(csv_file, parse_dates=['date'])
+            df.set_index('date', inplace=True)
+            features[name] = df
 
     if daily_perf.empty:
-        st.warning("RL Portfolio result files not found. Please run re_cc.py first.")
-        st.info(f"Expected path: {RL_DAILY_PERF_FILE}")
+        st.warning(f"{model_type} result files not found. Please run {script_name} first.")
+        st.info(f"Expected path: {daily_perf_file}")
         return
 
     # Create tabs
@@ -1474,7 +1516,7 @@ def page_rl_portfolio() -> None:
 
         if not features:
             st.warning("Feature data not available")
-            st.info(f"Expected path: {RL_FEATURES_DIR}")
+            st.info(f"Expected path: {features_dir}")
         else:
             available_features = list(features.keys())
 
