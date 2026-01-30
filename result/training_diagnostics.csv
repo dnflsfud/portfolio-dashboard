@@ -1,0 +1,18 @@
+﻿Category,Metric,Value,Status,Description
+Convergence,Converged,No,⚠,Training reached stable state
+Convergence,Convergence Episode,10,✓,Episode where convergence detected
+Convergence,Early Stopped,No,-,Training stopped early due to no improvement
+Convergence,Reward Trend,0.0002,✓,"Positive = improving, Negative = degrading"
+Overfitting,Train-Val Gap,724.70%,⚠,Gap between train and validation performance
+Overfitting,Overfitting Detected,Yes,✗,Gap > 30% indicates potential overfitting
+Performance,Test Return,340.75%,✓,Total return on test period
+Performance,Test Sharpe,2.603,✓,"Risk-adjusted return (>0.5 good, >1.0 excellent)"
+Performance,Excess Return,230.14%,✓,Return above benchmark
+Performance,Information Ratio,3.715,✓,Excess return per unit of tracking error
+Weights,Avg Turnover,8.13%,✓,Monthly turnover (<30% recommended)
+Weights,Concentration (HHI),0.178,✓,Portfolio concentration (<0.3 diversified)
+Weights,Max Single Weight,35.92%,✓,Highest weight assigned to single stock
+Weights,Zero Weight Ratio,26.26%,-,Percentage of near-zero weights
+Stability,Reward Std Dev,0.0097,✓,Lower is more stable
+Stability,Final Train Reward,0.0064,✓,Last training episode reward
+Stability,Final Val Reward,-0.0081,⚠,Last validation reward
