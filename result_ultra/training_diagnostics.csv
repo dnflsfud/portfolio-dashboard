@@ -1,0 +1,17 @@
+﻿Category,Metric,Value,Status,Description
+Convergence,Converged,Yes,✓,Training reached stable state
+Convergence,Convergence Episode,15,✓,Episode where convergence detected
+Convergence,Early Stopped,No,-,Training stopped early
+Convergence,Reward Trend,0.0010,✓,Positive = improving
+Overfitting,Train-Val Gap,23.23%,✓,Gap between train and validation
+Overfitting,Overfitting Detected,No,✓,Gap > 30% indicates overfitting
+Performance,Test Return,371.63%,✓,Total return on test period
+Performance,Test Sharpe,2.432,✓,Risk-adjusted return
+Performance,Excess Return,261.02%,✓,Return above benchmark
+Performance,Information Ratio,3.288,✓,Excess return per TE
+Weights,Avg Turnover,15.28%,✓,Monthly turnover
+Weights,Concentration (HHI),0.150,✓,Portfolio concentration
+Weights,Max Single Weight,40.83%,⚠,Highest weight
+Stability,Reward Std Dev,0.1357,⚠,Lower is more stable
+Stability,Final Train Reward,0.9372,✓,Last training reward
+Stability,Final Val Reward,0.7552,✓,Last validation reward
