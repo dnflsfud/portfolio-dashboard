@@ -21,3 +21,21 @@ venv/
 # OS
 .DS_Store
 Thumbs.db
+
+# Backup files produced by sync_filtered_from_masters / update_px_last
+*.backup*.xlsx
+*.prefilter*.xlsx
+*.sync-backup*.xlsx
+~$*.xlsx
+
+# Local-only dev artifacts (the .py scripts in _workspace are tracked, only outputs are not)
+_workspace/renders/
+_workspace/*.html
+_workspace/qa_report_*.md
+dev/
+
+# Claude worktrees (avoid recursive repos)
+.claude/worktrees/
+
+# Streamlit local secrets
+.streamlit/secrets.toml

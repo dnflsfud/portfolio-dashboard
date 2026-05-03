@@ -1,0 +1,29 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "Self_port_cloud (Streamlit, full app)",
+      "runtimeExecutable": "C:/Users/westl/PycharmProjects/pythonProject/venv_vf_new/Scripts/python.exe",
+      "runtimeArgs": [
+        "-m", "streamlit", "run", "Self_port_cloud.py",
+        "--server.headless", "true",
+        "--server.port", "8501",
+        "--server.runOnSave", "true",
+        "--server.fileWatcherType", "auto",
+        "--browser.gatherUsageStats", "false"
+      ],
+      "port": 8501
+    },
+    {
+      "name": "Self_port_cloud (Streamlit, alt port 8511)",
+      "runtimeExecutable": "C:/Users/westl/PycharmProjects/pythonProject/venv_vf_new/Scripts/python.exe",
+      "runtimeArgs": [
+        "-m", "streamlit", "run", "Self_port_cloud.py",
+        "--server.headless", "true",
+        "--server.port", "8511",
+        "--browser.gatherUsageStats", "false"
+      ],
+      "port": 8511
+    }
+  ]
+}

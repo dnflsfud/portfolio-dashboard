@@ -19,6 +19,9 @@ from plotly.subplots import make_subplots
 from datetime import datetime
 import itertools
 
+from lib.tab_portfolio_monitor import render_portfolio_monitor_tab
+from lib.tab_universe_analyst import render_universe_analyst_tab
+
 st.set_page_config(page_title="Personal Portfolio Dashboard", layout="wide")
 
 # ------------------------------------------------------------------------------------
@@ -1606,7 +1609,14 @@ def main():
     st.sidebar.title("Navigation")
     page = st.sidebar.radio(
         "Select Page",
-        ["Portfolio Overview", "RL Portfolio", "Fundamental Analysis", "Revision Time Progression"]
+        [
+            "Portfolio Overview",
+            "RL Portfolio",
+            "Fundamental Analysis",
+            "Revision Time Progression",
+            "🎀 아린이 포트폴리오 모니터",
+            "🔍 유니버스 분석",
+        ],
     )
 
     # Sidebar portfolio info
@@ -1625,6 +1635,10 @@ def main():
         page_fundamentals(portfolio, sp500_data)
     elif page == "Revision Time Progression":
         page_revision_progression(portfolio, factset_data)
+    elif page == "🎀 아린이 포트폴리오 모니터":
+        render_portfolio_monitor_tab()
+    elif page == "🔍 유니버스 분석":
+        render_universe_analyst_tab()
 
 
 if __name__ == "__main__":
