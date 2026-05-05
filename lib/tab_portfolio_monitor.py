@@ -359,11 +359,16 @@ def _total_cumulative_series(
     return pd.Series(out_val, index=pd.DatetimeIndex(out_idx), name="총합")
 
 
-def _daily_returns_panel(holdings: pd.DataFrame, px_panel: pd.DataFrame) -> pd.DataFrame:
+def _daily_returns_panel(
+    holdings: pd.DataFrame,
+    px_panel: pd.DataFrame,
+    business_calendar: pd.DatetimeIndex | None = None,
+) -> pd.DataFrame:
     """Per-ticker daily % change (close-to-close) since first transaction date.
 
     Aggregates by ticker first, then takes pct_change of PX_LAST from the
-    ticker's first transaction onward.
+    ticker's first transaction onward. Restricts the index to actual trading
+    days (SPX calendar) so weekend/holiday rows don't appear with 0.00%.
     """
     if holdings.empty:
         return pd.DataFrame()
@@ -375,12 +380,17 @@ def _daily_returns_panel(holdings: pd.DataFrame, px_panel: pd.DataFrame) -> pd.D
         first = pd.Timestamp(grp["Date"].min())
         s = px_panel[ticker].dropna()
         s = s[s.index >= first]
+        if business_calendar is not None:
+            s = s[s.index.isin(business_calendar)]
         if len(s) < 2:
             continue
         parts[ticker] = s.pct_change().dropna() * 100
     if not parts:
         return pd.DataFrame()
-    return pd.concat(parts, axis=1)
+    panel = pd.concat(parts, axis=1)
+    if business_calendar is not None:
+        panel = panel[panel.index.isin(business_calendar)]
+    return panel
 
 
 # --------------------------------------------------------------------------- #
@@ -475,7 +485,9 @@ def _render_cumulative_chart(
             fig.add_trace(go.Scatter(
                 x=total.index, y=total.values, mode="lines+markers",
                 name="🎯 총합 (가중)",
-                line=dict(color="#111111", width=4, dash="solid"),
+                line=dict(color="#fbbf24", width=4, dash="solid"),
+                marker=dict(size=8, color="#fbbf24",
+                            line=dict(color="#92400e", width=1)),
                 hovertemplate="%{x|%Y-%m-%d}<br><b>총합 %{y:+.2f}%</b><extra></extra>",
             ))
             plotted += 1
@@ -525,11 +537,42 @@ def _months_between(start: pd.Timestamp, end: pd.Timestamp) -> List[str]:
     return [m.strftime("%Y-%m") for m in months]
 
 
-def _daily_html_table(sub: pd.DataFrame) -> str:
+def _format_return_cell(v: float) -> str:
+    """Inner HTML for one return cell: big emoji on top, signed percent below."""
+    emo = _cute_emoji(v)
+    if pd.isna(v):
+        return (
+            "<div style='font-size:2.6em; line-height:1;'>🤔</div>"
+            "<div style='color:#9ca3af; font-size:0.95em; margin-top:4px;'>—</div>"
+        )
+    color = "#16a34a" if v >= UP_THRESHOLD else (
+        "#dc2626" if v <= DOWN_THRESHOLD else "#6b7280"
+    )
+    return (
+        f"<div style='font-size:2.6em; line-height:1;'>{emo}</div>"
+        f"<div style='color:{color}; font-weight:700; "
+        f"font-size:1.05em; margin-top:4px;'>{v:+.2f}%</div>"
+    )
+
+
+def _daily_html_table(
+    sub: pd.DataFrame,
+    total_cum_series: pd.Series | None = None,
+) -> str:
     """Render a month's daily returns as a chunky, kid-friendly HTML table.
 
     Big emoji (≈2.6em) on top of each cell; signed percent below in green/red.
+    If `total_cum_series` is provided, prepends a "🎯 종합 누적" column showing
+    the portfolio-level cumulative return on each day (transaction-aware).
     """
+    has_total = total_cum_series is not None and not total_cum_series.empty
+
+    total_header = (
+        "<th style='padding:10px 14px; text-align:center; "
+        "background:#f3f4f6; border-bottom:2px solid #d1d5db; "
+        "font-weight:700; color:#111;'>🎯 종합 누적</th>"
+        if has_total else ""
+    )
     headers = "".join(
         f"<th style='padding:10px 14px; text-align:center; "
         f"background:#f3f4f6; border-bottom:2px solid #d1d5db; "
@@ -538,33 +581,24 @@ def _daily_html_table(sub: pd.DataFrame) -> str:
     )
     rows_html = []
     for d, row in sub.iterrows():
-        cells = []
-        for ticker in sub.columns:
-            v = row[ticker]
-            emo = _cute_emoji(v)
-            if pd.isna(v):
-                cell = (
-                    "<div style='font-size:2.6em; line-height:1;'>🤔</div>"
-                    "<div style='color:#9ca3af; font-size:0.95em; margin-top:4px;'>—</div>"
-                )
-            else:
-                color = "#16a34a" if v >= UP_THRESHOLD else (
-                    "#dc2626" if v <= DOWN_THRESHOLD else "#6b7280"
-                )
-                cell = (
-                    f"<div style='font-size:2.6em; line-height:1;'>{emo}</div>"
-                    f"<div style='color:{color}; font-weight:700; "
-                    f"font-size:1.05em; margin-top:4px;'>{v:+.2f}%</div>"
-                )
-            cells.append(
+        total_cell = ""
+        if has_total:
+            tv = total_cum_series.get(d, float("nan"))
+            total_cell = (
                 f"<td style='padding:10px 14px; text-align:center; "
-                f"border-bottom:1px solid #e5e7eb;'>{cell}</td>"
+                f"border-bottom:1px solid #e5e7eb;'>"
+                f"{_format_return_cell(tv)}</td>"
             )
+        cells = [
+            f"<td style='padding:10px 14px; text-align:center; "
+            f"border-bottom:1px solid #e5e7eb;'>{_format_return_cell(row[ticker])}</td>"
+            for ticker in sub.columns
+        ]
         rows_html.append(
             f"<tr><td style='padding:10px 14px; font-weight:700; color:#374151; "
             f"white-space:nowrap; border-bottom:1px solid #e5e7eb;'>📅 "
             f"{d.strftime('%m월 %d일')}</td>"
-            f"{''.join(cells)}</tr>"
+            f"{total_cell}{''.join(cells)}</tr>"
         )
     return (
         "<div style='overflow-x:auto;'>"
@@ -573,14 +607,18 @@ def _daily_html_table(sub: pd.DataFrame) -> str:
         "<thead><tr>"
         "<th style='padding:10px 14px; text-align:left; background:#f3f4f6; "
         "border-bottom:2px solid #d1d5db;'>날짜</th>"
-        f"{headers}"
+        f"{total_header}{headers}"
         "</tr></thead>"
         f"<tbody>{''.join(rows_html)}</tbody>"
         "</table></div>"
     )
 
 
-def _render_monthly_tabs(holdings: pd.DataFrame, daily_returns: pd.DataFrame) -> None:
+def _render_monthly_tabs(
+    holdings: pd.DataFrame,
+    daily_returns: pd.DataFrame,
+    total_cum_series: pd.Series | None = None,
+) -> None:
     if daily_returns.empty:
         st.info("📭 일별 수익률을 계산할 데이터가 아직 없어요.")
         return
@@ -599,7 +637,13 @@ def _render_monthly_tabs(holdings: pd.DataFrame, daily_returns: pd.DataFrame) ->
                 st.write("이 달에는 거래일이 없거나 보유 시작 전이에요.")
                 continue
             sub = sub.round(2).sort_index()
-            st.markdown(_daily_html_table(sub), unsafe_allow_html=True)
+            sub_total = None
+            if total_cum_series is not None and not total_cum_series.empty:
+                sub_total = total_cum_series.reindex(sub.index).round(2)
+            st.markdown(
+                _daily_html_table(sub, total_cum_series=sub_total),
+                unsafe_allow_html=True,
+            )
 
 
 def _render_transaction_log(holdings: pd.DataFrame) -> None:
@@ -681,8 +725,11 @@ def render_portfolio_monitor_tab() -> None:
 
     st.divider()
     st.subheader("📅 월별 일일 수익률")
-    daily = _daily_returns_panel(holdings, px_panel)
-    _render_monthly_tabs(holdings, daily)
+    daily = _daily_returns_panel(holdings, px_panel, business_calendar=cal)
+    total_cum = _total_cumulative_series(holdings, px_panel)
+    if not total_cum.empty:
+        total_cum = total_cum[total_cum.index.isin(cal)]
+    _render_monthly_tabs(holdings, daily, total_cum_series=total_cum)
 
     st.divider()
     with st.expander("📋 거래 내역 보기", expanded=False):
