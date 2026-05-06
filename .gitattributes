@@ -1,1 +1,4 @@
-data/*.xlsx filter=lfs diff=lfs merge=lfs -text
+# Large data files via Git LFS — only the bulky Factset dump needs LFS.
+# S&P500_filtered.xlsx and Self_Port.xlsx stay as regular blobs so Streamlit
+# Cloud can fetch them via standard git clone without LFS quota dependency.
+data/D_Factset_Tech.xlsx filter=lfs diff=lfs merge=lfs -text
