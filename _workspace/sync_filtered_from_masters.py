@@ -359,6 +359,17 @@ def main() -> int:
         out_sheets["SPX Index"] = spx
         print(f"  SPX Index                    rows={len(spx)}")
 
+    # USDKRW Curncy — extract from Index.xlsx PX_LAST as long-format sheet
+    ix_px = ix.get("PX_LAST")
+    if ix_px is not None and "USDKRW Curncy" in ix_px.columns:
+        krw = ix_px[["date", "USDKRW Curncy"]].copy()
+        krw["date"] = pd.to_datetime(krw["date"])
+        krw = krw.dropna(subset=["USDKRW Curncy"])
+        krw.insert(1, "Ticker", "USDKRW Curncy")
+        krw = krw.sort_values("date").drop_duplicates("date", keep="last").reset_index(drop=True)
+        out_sheets["USDKRW Curncy"] = krw
+        print(f"  USDKRW Curncy                rows={len(krw)}")
+
     # Earnings_Date — only from S&P500.xlsx (date + Universe.Ticker subset)
     if "Earnings_Date" in sp:
         ed = _normalize_panel(sp["Earnings_Date"])

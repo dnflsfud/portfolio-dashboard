@@ -25,7 +25,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from .data_loader import load_self_port_holdings, load_px_last
+from .data_loader import load_self_port_holdings, load_px_last, load_usdkrw
 from .calendar_utils import get_business_calendar
 from .live_price import fetch_yahoo_latest, yfinance_available
 
@@ -537,8 +537,17 @@ def _months_between(start: pd.Timestamp, end: pd.Timestamp) -> List[str]:
     return [m.strftime("%Y-%m") for m in months]
 
 
-def _format_return_cell(v: float) -> str:
-    """Inner HTML for one return cell: big emoji on top, signed percent below."""
+def _format_return_cell(
+    v: float,
+    pnl_usd: float | None = None,
+    pnl_krw: float | None = None,
+) -> str:
+    """Inner HTML for one return cell: big emoji on top, signed percent below.
+
+    If `pnl_usd` is provided, appends a $ amount line; if `pnl_krw` is
+    provided, appends a ₩ amount line. Used on the latest-date row of the
+    monthly daily-return table.
+    """
     emo = _cute_emoji(v)
     if pd.isna(v):
         return (
@@ -548,24 +557,46 @@ def _format_return_cell(v: float) -> str:
     color = "#16a34a" if v >= UP_THRESHOLD else (
         "#dc2626" if v <= DOWN_THRESHOLD else "#6b7280"
     )
-    return (
-        f"<div style='font-size:2.6em; line-height:1;'>{emo}</div>"
+    parts = [
+        f"<div style='font-size:2.6em; line-height:1;'>{emo}</div>",
         f"<div style='color:{color}; font-weight:700; "
-        f"font-size:1.05em; margin-top:4px;'>{v:+.2f}%</div>"
-    )
+        f"font-size:1.05em; margin-top:4px;'>{v:+.2f}%</div>",
+    ]
+    if pnl_usd is not None and not pd.isna(pnl_usd):
+        parts.append(
+            f"<div style='color:{color}; font-weight:600; "
+            f"font-size:0.85em; margin-top:2px;'>{pnl_usd:+,.2f}$</div>"
+        )
+    if pnl_krw is not None and not pd.isna(pnl_krw):
+        parts.append(
+            f"<div style='color:{color}; font-weight:600; "
+            f"font-size:0.85em; margin-top:1px;'>{pnl_krw:+,.0f}₩</div>"
+        )
+    return "".join(parts)
 
 
 def _daily_html_table(
     sub: pd.DataFrame,
     total_cum_series: pd.Series | None = None,
+    *,
+    latest_date: pd.Timestamp | None = None,
+    latest_pnl_per_ticker_usd: Dict[str, float] | None = None,
+    latest_pnl_total_usd: float | None = None,
+    usdkrw_rate: float | None = None,
 ) -> str:
     """Render a month's daily returns as a chunky, kid-friendly HTML table.
 
     Big emoji (≈2.6em) on top of each cell; signed percent below in green/red.
     If `total_cum_series` is provided, prepends a "🎯 종합 누적" column showing
     the portfolio-level cumulative return on each day (transaction-aware).
+
+    On the row matching `latest_date`, appends $ and ₩ P&L amounts under each
+    cell (per-ticker P&L from `latest_pnl_per_ticker_usd`, total P&L from
+    `latest_pnl_total_usd`, KRW computed via `usdkrw_rate`).
     """
     has_total = total_cum_series is not None and not total_cum_series.empty
+    pnl_usd = latest_pnl_per_ticker_usd or {}
+    fx = usdkrw_rate if (usdkrw_rate is not None and not pd.isna(usdkrw_rate)) else None
 
     total_header = (
         "<th style='padding:10px 14px; text-align:center; "
@@ -581,19 +612,27 @@ def _daily_html_table(
     )
     rows_html = []
     for d, row in sub.iterrows():
+        is_latest = (latest_date is not None) and (pd.Timestamp(d) == pd.Timestamp(latest_date))
+
         total_cell = ""
         if has_total:
             tv = total_cum_series.get(d, float("nan"))
+            t_usd = latest_pnl_total_usd if is_latest else None
+            t_krw = (t_usd * fx) if (is_latest and t_usd is not None and fx is not None) else None
             total_cell = (
                 f"<td style='padding:10px 14px; text-align:center; "
                 f"border-bottom:1px solid #e5e7eb;'>"
-                f"{_format_return_cell(tv)}</td>"
+                f"{_format_return_cell(tv, pnl_usd=t_usd, pnl_krw=t_krw)}</td>"
             )
-        cells = [
-            f"<td style='padding:10px 14px; text-align:center; "
-            f"border-bottom:1px solid #e5e7eb;'>{_format_return_cell(row[ticker])}</td>"
-            for ticker in sub.columns
-        ]
+        cells = []
+        for ticker in sub.columns:
+            c_usd = pnl_usd.get(ticker) if is_latest else None
+            c_krw = (c_usd * fx) if (is_latest and c_usd is not None and fx is not None) else None
+            cells.append(
+                f"<td style='padding:10px 14px; text-align:center; "
+                f"border-bottom:1px solid #e5e7eb;'>"
+                f"{_format_return_cell(row[ticker], pnl_usd=c_usd, pnl_krw=c_krw)}</td>"
+            )
         rows_html.append(
             f"<tr><td style='padding:10px 14px; font-weight:700; color:#374151; "
             f"white-space:nowrap; border-bottom:1px solid #e5e7eb;'>📅 "
@@ -614,10 +653,63 @@ def _daily_html_table(
     )
 
 
+def _pnl_at_date(
+    holdings: pd.DataFrame,
+    px_panel: pd.DataFrame,
+    target_date: pd.Timestamp,
+) -> Tuple[Dict[str, float], float]:
+    """Transaction-aware $ P&L per ticker and total at `target_date`.
+
+    P&L = market_value(d) + total_sells$(d) - total_buys$(d)
+        = net_shares × price(d) + Σ(-sell.Number × sell.Entry_Price)
+                                 − Σ(buy.Number × buy.Entry_Price)
+    Falls back to the last available price ≤ target_date when target_date
+    is missing from PX_LAST.
+    """
+    per_ticker: Dict[str, float] = {}
+    if holdings.empty:
+        return per_ticker, 0.0
+    txns = _normalize_transactions(holdings)
+    target_date = pd.Timestamp(target_date)
+    for ticker, grp in txns.groupby("Ticker", sort=False):
+        active = grp[grp["Date"] <= target_date]
+        if active.empty or ticker not in px_panel.columns:
+            continue
+        prices = px_panel[ticker].dropna()
+        avail = prices[prices.index <= target_date]
+        if avail.empty:
+            continue
+        price = float(avail.iloc[-1])
+        net_shares = float(active["Number"].sum())
+        buys = active[active["Number"] > 0]
+        sells = active[active["Number"] < 0]
+        total_buys = float((buys["Number"] * buys["Entry_Price"]).sum())
+        total_sells = float((-sells["Number"] * sells["Entry_Price"]).sum())
+        market_value = net_shares * price
+        per_ticker[ticker] = market_value + total_sells - total_buys
+    total = float(sum(per_ticker.values()))
+    return per_ticker, total
+
+
+def _latest_usdkrw(usdkrw: pd.Series, target_date: pd.Timestamp | None = None) -> float | None:
+    """Most recent USD/KRW rate ≤ target_date (or absolute latest)."""
+    if usdkrw is None or usdkrw.empty:
+        return None
+    if target_date is None:
+        return float(usdkrw.iloc[-1])
+    avail = usdkrw[usdkrw.index <= pd.Timestamp(target_date)]
+    if avail.empty:
+        return float(usdkrw.iloc[0])
+    return float(avail.iloc[-1])
+
+
 def _render_monthly_tabs(
     holdings: pd.DataFrame,
     daily_returns: pd.DataFrame,
     total_cum_series: pd.Series | None = None,
+    *,
+    px_panel: pd.DataFrame | None = None,
+    usdkrw: pd.Series | None = None,
 ) -> None:
     if daily_returns.empty:
         st.info("📭 일별 수익률을 계산할 데이터가 아직 없어요.")
@@ -629,6 +721,26 @@ def _render_monthly_tabs(
         st.info("📅 표시할 월이 없어요.")
         return
 
+    # Compute P&L at the latest business day in the daily-returns panel
+    latest_date = pd.Timestamp(latest)
+    latest_pnl_per_ticker: Dict[str, float] = {}
+    latest_pnl_total: float = 0.0
+    fx_rate: float | None = None
+    if px_panel is not None and not px_panel.empty:
+        latest_pnl_per_ticker, latest_pnl_total = _pnl_at_date(
+            holdings, px_panel, latest_date
+        )
+    if usdkrw is not None and not usdkrw.empty:
+        fx_rate = _latest_usdkrw(usdkrw, latest_date)
+
+    if fx_rate is not None:
+        st.caption(
+            f"💱 환율 (가장 최근 영업일 기준): "
+            f"₩{fx_rate:,.2f} / $1  ·  최근 거래일 {latest_date.strftime('%Y-%m-%d')}"
+        )
+
+    # Map ticker keys: P&L dict uses full ticker (e.g. "GOOGL US Equity"),
+    # daily_returns columns are also full tickers — no key remap needed.
     tabs = st.tabs([f"📅 {m}" for m in months])
     for tab, ym in zip(tabs, months):
         with tab:
@@ -640,8 +752,18 @@ def _render_monthly_tabs(
             sub_total = None
             if total_cum_series is not None and not total_cum_series.empty:
                 sub_total = total_cum_series.reindex(sub.index).round(2)
+            # Only show $/₩ on the row matching latest_date AND only in the
+            # tab whose month contains that date.
+            show_pnl_in_this_tab = latest_date.strftime("%Y-%m") == ym
             st.markdown(
-                _daily_html_table(sub, total_cum_series=sub_total),
+                _daily_html_table(
+                    sub,
+                    total_cum_series=sub_total,
+                    latest_date=latest_date if show_pnl_in_this_tab else None,
+                    latest_pnl_per_ticker_usd=latest_pnl_per_ticker if show_pnl_in_this_tab else None,
+                    latest_pnl_total_usd=latest_pnl_total if show_pnl_in_this_tab else None,
+                    usdkrw_rate=fx_rate if show_pnl_in_this_tab else None,
+                ),
                 unsafe_allow_html=True,
             )
 
@@ -729,7 +851,13 @@ def render_portfolio_monitor_tab() -> None:
     total_cum = _total_cumulative_series(holdings, px_panel)
     if not total_cum.empty:
         total_cum = total_cum[total_cum.index.isin(cal)]
-    _render_monthly_tabs(holdings, daily, total_cum_series=total_cum)
+    usdkrw = load_usdkrw()
+    _render_monthly_tabs(
+        holdings, daily,
+        total_cum_series=total_cum,
+        px_panel=px_panel,
+        usdkrw=usdkrw,
+    )
 
     st.divider()
     with st.expander("📋 거래 내역 보기", expanded=False):

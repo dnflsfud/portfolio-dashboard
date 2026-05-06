@@ -164,6 +164,30 @@ def load_px_last() -> pd.DataFrame:
     return load_sp500_panel("PX_LAST")
 
 
+def load_usdkrw() -> pd.Series:
+    """USD/KRW exchange rate as a Series indexed by business-day date.
+
+    Reads the 'USDKRW Curncy' sheet (long-format: [date, Ticker, USDKRW Curncy])
+    from S&P500_filtered.xlsx. Returns an empty Series if the sheet is missing
+    so callers can degrade gracefully (no FX conversion).
+    """
+    path = _resolve_sp500_path()
+    try:
+        df = _read_panel(str(path), "USDKRW Curncy", _mtime(path))
+    except (ValueError, KeyError):
+        return pd.Series(dtype=float, name="USDKRW")
+
+    if "date" in df.columns and "USDKRW Curncy" in df.columns:
+        s = df.set_index(pd.to_datetime(df["date"]))["USDKRW Curncy"]
+    elif "USDKRW Curncy" in df.columns:
+        s = df["USDKRW Curncy"]
+    else:
+        return pd.Series(dtype=float, name="USDKRW")
+    s = pd.to_numeric(s, errors="coerce").dropna().sort_index()
+    s.name = "USDKRW"
+    return s
+
+
 def get_data_paths() -> dict:
     """Resolved paths for diagnostics."""
     out = {}
