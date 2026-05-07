@@ -64,6 +64,13 @@ PERIOD_COLORS = {
     '3M ago': '#d62728'    # Red
 }
 
+
+def _file_mtime(path: Path) -> float:
+    try:
+        return path.stat().st_mtime
+    except OSError:
+        return 0.0
+
 PERIODS = {"Now": 0, "2W ago": 10, "1M ago": 21, "3M ago": 63}
 
 METRIC_LABELS = {
@@ -142,7 +149,7 @@ def _calc_maxdd(returns: pd.Series) -> float:
 # Data Loading
 # ------------------------------------------------------------------------------------
 @st.cache_data(show_spinner=True)
-def load_portfolio() -> pd.DataFrame:
+def load_portfolio(cache_key: float) -> pd.DataFrame:
     """Load portfolio from Self_Port.xlsx"""
     if not PORT_FILE.exists():
         st.error(f"Portfolio file not found: {PORT_FILE}")
@@ -155,7 +162,7 @@ def load_portfolio() -> pd.DataFrame:
 
 
 @st.cache_data(show_spinner=True)
-def load_sp500_data() -> Dict[str, pd.DataFrame]:
+def load_sp500_data(cache_key: float) -> Dict[str, pd.DataFrame]:
     """Load all sheets from S&P500_filtered.xlsx"""
     if not SP500_FILE.exists():
         st.error(f"S&P500 file not found: {SP500_FILE}")
@@ -175,7 +182,7 @@ def load_sp500_data() -> Dict[str, pd.DataFrame]:
 
 
 @st.cache_data(show_spinner=True)
-def load_factset_revision() -> Dict[str, pd.DataFrame]:
+def load_factset_revision(cache_key: float) -> Dict[str, pd.DataFrame]:
     """Load Factset revision data from D_Factset_Tech.xlsx"""
     if not FACTSET_FILE.exists():
         st.warning(f"Factset file not found: {FACTSET_FILE}")
@@ -1601,9 +1608,9 @@ def main():
 
     # Load data
     with st.spinner("Loading data..."):
-        portfolio = load_portfolio()
-        sp500_data = load_sp500_data()
-        factset_data = load_factset_revision()
+        portfolio = load_portfolio(_file_mtime(PORT_FILE))
+        sp500_data = load_sp500_data(_file_mtime(SP500_FILE))
+        factset_data = load_factset_revision(_file_mtime(FACTSET_FILE))
 
     # Sidebar navigation
     st.sidebar.title("Navigation")

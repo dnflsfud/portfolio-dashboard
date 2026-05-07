@@ -83,8 +83,8 @@ def _mtime(p: Path) -> float:
 
 
 @st.cache_data(show_spinner=False)
-def _read_sheet(path_str: str, sheet: str, _cache_key: float) -> pd.DataFrame:
-    """Read one sheet. The _cache_key argument forces invalidation on file change."""
+def _read_sheet(path_str: str, sheet: str, cache_key: float) -> pd.DataFrame:
+    """Read one sheet. The cache_key argument forces invalidation on file change."""
     return pd.read_excel(path_str, sheet_name=sheet, engine="openpyxl")
 
 
@@ -117,7 +117,7 @@ def load_universe_tickers() -> List[str]:
 
 
 @st.cache_data(show_spinner=False)
-def _read_panel(path_str: str, sheet: str, _cache_key: float) -> pd.DataFrame:
+def _read_panel(path_str: str, sheet: str, cache_key: float) -> pd.DataFrame:
     df = pd.read_excel(path_str, sheet_name=sheet, engine="openpyxl")
     if "date" in df.columns:
         df["date"] = pd.to_datetime(df["date"])

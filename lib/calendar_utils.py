@@ -2,12 +2,10 @@
 from __future__ import annotations
 
 import pandas as pd
-import streamlit as st
 
 from .data_loader import load_spx_index
 
 
-@st.cache_data(show_spinner=False)
 def get_business_calendar() -> pd.DatetimeIndex:
     """The SPX Index 'date' column is the master business-day calendar."""
     spx = load_spx_index()

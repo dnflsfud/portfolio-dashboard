@@ -21,9 +21,11 @@ cd /d "%PROJ_DIR%"
 
 set "PARENT_SELF_PORT=C:\Users\westl\PycharmProjects\pythonProject\venv_vf_new\port\Self_Port.xlsx"
 set "REPO_SELF_PORT=%PROJ_DIR%Self_Port.xlsx"
+set "DATA_SELF_PORT=%PROJ_DIR%data\Self_Port.xlsx"
 set "MASTER_SP500=C:\Users\westl\PycharmProjects\pythonProject\S&P500.xlsx"
 set "MASTER_INDEX=C:\Users\westl\PycharmProjects\pythonProject\Index.xlsx"
 set "FILTERED=%PROJ_DIR%data\S&P500_filtered.xlsx"
+set "CLOUD_BRANCH=claude/interesting-einstein-9b6bc8"
 
 REM ---- Step 0 — sync Self_Port.xlsx from parent into the repo ----
 echo.
@@ -31,8 +33,15 @@ echo ============================================================
 echo  [0/5] Sync Self_Port.xlsx from parent into the repo
 echo ============================================================
 if exist "%PARENT_SELF_PORT%" (
-    copy /Y "%PARENT_SELF_PORT%" "%REPO_SELF_PORT%" >nul
-    echo  copied parent -^> repo: Self_Port.xlsx
+    if /I not "%PARENT_SELF_PORT%"=="%REPO_SELF_PORT%" (
+        copy /Y "%PARENT_SELF_PORT%" "%REPO_SELF_PORT%" >nul
+        echo  copied parent -^> repo: Self_Port.xlsx
+    ) else (
+        echo  source already repo root: Self_Port.xlsx
+    )
+    if not exist "%PROJ_DIR%data" mkdir "%PROJ_DIR%data"
+    copy /Y "%PARENT_SELF_PORT%" "%DATA_SELF_PORT%" >nul
+    echo  copied parent -^> repo: data/Self_Port.xlsx
 ) else (
     echo  ! parent Self_Port.xlsx not found, using repo copy as-is
 )
@@ -78,7 +87,7 @@ echo ============================================================
 if defined NO_PUSH (
     echo  NO_PUSH set ^> skipping git push
 ) else (
-    git add "Self_Port.xlsx" "data/S&P500_filtered.xlsx" 2>nul
+    git add "Self_Port.xlsx" "data/Self_Port.xlsx" "data/S&P500_filtered.xlsx" 2>nul
     REM Only commit if there's a staged change.
     git diff --cached --quiet
     if errorlevel 1 (
@@ -95,6 +104,17 @@ if defined NO_PUSH (
                 echo    ^(check 'git pull' or auth status^)
             ) else (
                 echo  pushed - Streamlit Cloud should redeploy in ~2 minutes.
+                if defined CLOUD_BRANCH (
+                    if /I not "!CLOUD_BRANCH!"=="!BRANCH!" (
+                        echo  pushing !BRANCH! to Streamlit Cloud branch !CLOUD_BRANCH! ...
+                        git push origin "!BRANCH!:!CLOUD_BRANCH!"
+                        if errorlevel 1 (
+                            echo  ! cloud branch push failed - check Streamlit app branch setting.
+                        ) else (
+                            echo  cloud branch updated - Streamlit Cloud should redeploy in ~2 minutes.
+                        )
+                    )
+                )
             )
         )
     ) else (
