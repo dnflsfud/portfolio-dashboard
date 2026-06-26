@@ -3,17 +3,39 @@ from __future__ import annotations
 
 import pandas as pd
 
-from .data_loader import load_spx_index
+from .data_loader import load_spx_index, load_px_last
 
 
 def get_business_calendar() -> pd.DatetimeIndex:
-    """The SPX Index 'date' column is the master business-day calendar."""
+    """Master business-day calendar.
+
+    Anchored on the SPX Index 'date' column, but extended forward with the
+    PX_LAST trading days that come after the SPX Index sheet's last date.
+    The SPX Index sheet is only rebuilt by the full Bloomberg sync, whereas
+    PX_LAST is refreshed every day (yfinance), so without this extension the
+    calendar lags behind the latest prices and downstream views (e.g. the
+    monthly daily-return table) silently drop the most recent month.
+    Weekday filter drops weekend rows that can sneak into PX_LAST.
+    """
     spx = load_spx_index()
     if "date" in spx.columns:
-        dates = pd.to_datetime(spx["date"]).sort_values().unique()
+        dates = pd.to_datetime(spx["date"])
     else:
-        dates = pd.to_datetime(spx.index).sort_values().unique()
-    return pd.DatetimeIndex(dates)
+        dates = pd.to_datetime(spx.index)
+    cal = pd.DatetimeIndex(pd.Series(dates).dropna()).normalize().unique()
+
+    try:
+        px = load_px_last()
+    except Exception:
+        return cal.sort_values()
+    if len(px.index):
+        px_dates = pd.DatetimeIndex(pd.to_datetime(px.index)).normalize()
+        extra = px_dates[px_dates.weekday < 5]
+        if len(cal):
+            extra = extra[extra > cal.max()]
+        if len(extra):
+            cal = cal.append(extra)
+    return cal.normalize().unique().sort_values()
 
 
 def reindex_to_business_days(
